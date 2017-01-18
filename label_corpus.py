@@ -22,6 +22,26 @@ def count_punctuations(ustring):
     return i
 
 
+def replace_nonhanzi(ustring, uchar):
+    # 将非汉字替换为uchar
+    ustring2 = list()
+    for c in ustring:
+        if is_hanzi(c) is False:
+            ustring2.append(uchar)
+        else:
+            ustring2.append(c)
+
+    # 将连续出现的uchar替换为一个uchar
+    ustring3 = list(ustring2[0])
+    for i in range(1, len(ustring2)):
+        if ustring2[i] == uchar and ustring2[i-1] == uchar:
+            pass
+        else:
+            ustring3.append(ustring2[i])
+    return u''.join(ustring3)
+    
+
+
 if __name__ == '__main__':
     corpus_fpath = 'dataset/sentence_corpus.txt'
     labeled_corpus_fpath = 'dataset/labeled_corpus.txt'
@@ -30,16 +50,20 @@ if __name__ == '__main__':
     with open(labeled_corpus_fpath, 'w') as labeled_corpus_file:
         with open(corpus_fpath, 'r') as corpus_file:
             for line in corpus_file:
-                line = line.decode('utf-8')
-                hanzi_cnt = count_hanzi(line)
-                punc_cnt = count_punctuations(line)
-                if hanzi_cnt >= 3 and punc_cnt <= 3:
-                    hanzi = ':'.join(['Z', line])
-                    labeled_corpus_file.write(hanzi.encode('utf-8'))
-                    pinyin = ':'.join(['P', ''.join(lazy_pinyin(line))])
-                    #pinyin = ':'.join(['P', '-'.join(lazy_pinyin(line))])
-                    labeled_corpus_file.write(pinyin.encode('utf-8'))
-                    
-                    i += 1
-                    if i % 1000 == 0:
-                        print '{} lines processed'.format(i)
+                try:
+                    line = line.decode('utf-8')[:-1] # remove \n
+                    line = replace_nonhanzi(line, '_')
+                    hanzi_cnt = count_hanzi(line)
+                    if hanzi_cnt >= 2:
+                        hanzi = ':'.join(['Z', line])
+                        labeled_corpus_file.write(hanzi.encode('utf-8'))
+                        labeled_corpus_file.write('\n')
+                        pinyin = ':'.join(['P', ''.join(lazy_pinyin(line))])
+                        #pinyin = ':'.join(['P', '-'.join(lazy_pinyin(line))])
+                        labeled_corpus_file.write(pinyin.encode('utf-8'))
+                        labeled_corpus_file.write('\n')
+                except:
+                    pass
+                i += 1
+                if i % 1000 == 0:
+                    print '{} lines processed'.format(i)
