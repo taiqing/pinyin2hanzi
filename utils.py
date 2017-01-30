@@ -1,5 +1,7 @@
 # coding=utf-8
 
+import re
+
 def is_hanzi(uchar):
     """判断一个unicode是否是汉字"""
     if uchar >= u'\u4e00' and uchar <= u'\u9fa5':
@@ -67,3 +69,7 @@ def segment_text_into_sentences(text):
     sents = re.split(u'[，。？：；！,.?:;!…]', text)
     sents = [s.replace(' ', '').replace(u'\u3000', '') for s in sents]
     return sents
+
+
+def count_hanzi(s):
+    return sum([is_hanzi(c) for c in s])

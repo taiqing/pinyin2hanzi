@@ -1,17 +1,13 @@
 # coding=utf-8
 
+# Annotate sentences with their pinyin
+# Replace non-hanzi characters with a single special symbol
+
 import pypinyin
 from pypinyin import pinyin, lazy_pinyin
 
 from utils import *
-
-
-def count_hanzi(ustring):
-    i = 0
-    for uchar in ustring:
-        if is_hanzi(uchar):
-            i += 1
-    return i
+from config import *
 
 
 def count_punctuations(ustring):
@@ -39,11 +35,10 @@ def replace_nonhanzi(ustring, uchar):
         else:
             ustring3.append(ustring2[i])
     return u''.join(ustring3)
-    
 
 
 if __name__ == '__main__':
-    corpus_fpath = 'dataset/sentence_corpus.txt'
+    corpus_fpath = 'dataset/sentence_corpus_no_rare.txt'
     labeled_corpus_fpath = 'dataset/labeled_corpus.txt'
     
     i = 0
@@ -52,9 +47,9 @@ if __name__ == '__main__':
             for line in corpus_file:
                 try:
                     line = line.decode('utf-8')[:-1] # remove \n
-                    line = replace_nonhanzi(line, '_')
-                    hanzi_cnt = count_hanzi(line)
-                    if hanzi_cnt >= 2:
+                    n_hanzi = count_hanzi(line)
+                    if n_hanzi >= min_hanzi_len and n_hanzi <= max_hanzi_len:
+                        line = replace_nonhanzi(line, nonhanzi_symbol)
                         hanzi = ':'.join(['Z', line])
                         labeled_corpus_file.write(hanzi.encode('utf-8'))
                         labeled_corpus_file.write('\n')

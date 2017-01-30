@@ -2,6 +2,7 @@
 
 import cPickle
 
+
 def make_vocabulary(vocab):
     vocab2 = dict()
     i = 0
@@ -12,7 +13,7 @@ def make_vocabulary(vocab):
     
 
 if __name__ == '__main__':
-    labeled_corpus_path = 'dataset/labeled_corpus_no_rare.txt'
+    labeled_corpus_path = 'dataset/labeled_corpus.txt'
     vocab_file = 'dataset/vocab.pkl'
 
     vocab_source = dict()

@@ -3,12 +3,12 @@
 # format dataset as the form [(source, target), (source, target), ...]
 
 import cPickle
+import numpy as np
 
 
 if __name__ == '__main__':
-    labeled_corpus_path = 'dataset/labeled_corpus_no_rare.txt'
+    labeled_corpus_path = 'dataset/labeled_corpus.txt'
     dataset_file = 'dataset/dataset.pkl'
-    max_len = 70
 
     dataset = list()
     input_len = []
@@ -20,7 +20,7 @@ if __name__ == '__main__':
             if line.startswith('P:'):
                 source = line[2:]
                 input_len.append(len(source))
-                if len(source) <= max_len:
-                    dataset.append((source, target))
+                dataset.append((source, target))
     cPickle.dump(dataset, open(dataset_file, 'wb'))
+    print 'input length: {min} ~ {max}, average {a:.2f}'.format(min=np.min(input_len), max=np.max(input_len), a=np.mean(input_len))
     
