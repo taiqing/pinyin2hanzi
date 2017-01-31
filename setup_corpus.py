@@ -4,7 +4,7 @@ import re
 import os
 
 from utils import *
-from config import *
+from config import max_hanzi_num, min_hanzi_num
 
 
 if __name__ == '__main__':
@@ -25,7 +25,7 @@ if __name__ == '__main__':
                     for s in sents:
                         s = stringQ2B(s)
                         n_hanzi = count_hanzi(s)
-                        if n_hanzi <= max_hanzi_len and n_hanzi >= min_hanzi_len:
+                        if n_hanzi <= max_hanzi_num and n_hanzi >= min_hanzi_num:
                             f_write.write(s.encode('utf-8'))
                             f_write.write('\n')
                             sent_cnt += 1

@@ -7,7 +7,7 @@ import pypinyin
 from pypinyin import pinyin, lazy_pinyin
 
 from utils import *
-from config import *
+from config import min_hanzi_num, max_hanzi_num, max_nonhanzi_num
 
 
 def count_punctuations(ustring):
@@ -47,9 +47,10 @@ if __name__ == '__main__':
             for line in corpus_file:
                 try:
                     line = line.decode('utf-8')[:-1] # remove \n
+                    line = replace_nonhanzi(line, nonhanzi_symbol)
                     n_hanzi = count_hanzi(line)
-                    if n_hanzi >= min_hanzi_len and n_hanzi <= max_hanzi_len:
-                        line = replace_nonhanzi(line, nonhanzi_symbol)
+                    n_nonhanzi = len(line) - n_hanzi
+                    if n_hanzi >= min_hanzi_num and n_hanzi <= max_hanzi_num and n_nonhanzi <= max_nonhanzi_num:
                         hanzi = ':'.join(['Z', line])
                         labeled_corpus_file.write(hanzi.encode('utf-8'))
                         labeled_corpus_file.write('\n')

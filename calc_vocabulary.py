@@ -13,12 +13,12 @@ def make_vocabulary(vocab):
     
 
 if __name__ == '__main__':
-    labeled_corpus_path = 'dataset/labeled_corpus.txt'
+    aligned_corpus_path = 'dataset/aligned_labeled_corpus.txt'
     vocab_file = 'dataset/vocab.pkl'
 
     vocab_source = dict()
     vocab_target = dict()
-    with open(labeled_corpus_path, 'r') as f:
+    with open(aligned_corpus_path, 'r') as f:
         for line in f:
             line = line.decode('utf-8')
             if line.startswith('P:'):
