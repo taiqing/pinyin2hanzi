@@ -78,10 +78,10 @@ def vectorise_list_of_pairs(pairs, n_input, n_output, n_step_input, n_step_outpu
     target = np.zeros((len(pairs), n_step_output, n_output), np.float32)
     for j, pair in zip(range(len(pairs)), pairs):
         s, t = pair
-        for k, c in zip(range(len(s)), s):
-            source[j, k, vocab_source[c]] = 1
-        for k, c in zip(range(len(t)), t):
-            target[j, k, vocab_target[c]] = 1
+        for k, x in zip(range(len(s)), s):
+            source[j, k, x] = 1
+        for k, x in zip(range(len(t)), t):
+            target[j, k, x] = 1
     return source, target
 
 if __name__ == '__main__':
@@ -96,9 +96,10 @@ if __name__ == '__main__':
     n_step_output = 13
     n_hidden = 512
     weight_stddev = 0.1
-    n_epoch = 1
+    n_epoch = 20
     batch_size = 100
-    validation_steps = 10
+    validation_steps = 100
+    save_param_steps = 100
     learning_rate = 1e-2
     gamma = 1e-3
 
@@ -110,8 +111,8 @@ if __name__ == '__main__':
 
     x = tf.placeholder(tf.float32, [None, n_step_input, n_input], name='x')
     y = tf.placeholder(tf.float32, [None, n_step_output, n_output], name='y')
-    learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-    gamma = tf.placeholder(tf.float32, name='gamma')
+    #learning_rate = tf.placeholder(tf.float32, name='learning_rate')
+    #gamma = tf.placeholder(tf.float32, name='gamma')
 
     # encoding
     n_sample = tf.shape(x)[0]
@@ -119,28 +120,25 @@ if __name__ == '__main__':
     encoder_states = [h0]
     for i in range(n_step_input - 1, -1, -1):
         h_prev = encoder_states[-1]
-        x_t = x[:, i, :]
-        h_t = encoder_cell(h_prev, x_t)  # reads input in reverse order
+        x_t = x[:, i, :] # reads input in the reverse time order
+        h_t = encoder_cell(h_prev, x_t)
         encoder_states.append(h_t)
 
     # decoding
     decoder_states = [encoder_states[-1]]
-    initial_input = tf.zeros([n_sample, n_input], tf.float32)
+    initial_input = tf.zeros([n_sample, n_output], tf.float32)
+    outputs = list()
     for t in range(0, n_step_output):
         h_prev = decoder_states[-1]
         y_t = initial_input if t == 0 else y[:, t - 1, :]
         h_t = decoder_cell(h_prev, y_t)
+        out_t = tf.nn.softmax(tf.matmul(h_t, W_o) + b_o)
         decoder_states.append(h_t)
-
-    outputs = list()
-    for i in range(1, len(decoder_states)):
-        h = decoder_states[i]
-        out = tf.nn.softmax(tf.matmul(h, W_o) + b_o)
-        outputs.append(out)
+        outputs.append(out_t)
     outputs = tf.pack(outputs, axis=1)  # outputs: n_samples x n_step x n_output
 
     # loss
-    loss = -tf.reduce_mean(tf.log(outputs * y))
+    loss = -tf.reduce_mean(tf.log(outputs) * y)
 
     # l2-norm of paramters
     regularizer = 0.
@@ -160,29 +158,37 @@ if __name__ == '__main__':
     # validation set
     n_sample = len(dataset)
     permutation = np.random.permutation(n_sample)
-    selected_idx = permutation[0: n_sample/10]
+    selected_idx = permutation[0: n_sample/20]
     validation_set = [dataset[k] for k in selected_idx]
-    selected_idx = permutation[n_sample / 10 :]
+    selected_idx = permutation[n_sample/20 :]
     train_set = [dataset[k] for k in selected_idx]
 
     n_sample = len(train_set)
     sess = tf.Session()
     with sess.as_default():
         init_vars.run()
+        #validation_set = validation_set[0:10]
+        #source, target = vectorise_list_of_pairs(validation_set, n_input, n_output, n_step_input, n_step_output)
+        #c, l, r = sess.run([cost, loss, regularizer], feed_dict={x: source, y: target})
+        #print 'validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
+        #    n=len(validation_set),
+        #    c=c,
+        #    l=l,
+        #    r=r
+        #)
         sample_counter = 0
         for i in range(int(n_epoch * n_sample / batch_size)):
             if i % int(validation_steps) == 0:
                 source, target = vectorise_list_of_pairs(validation_set, n_input, n_output, n_step_input, n_step_output)
-                cost, loss, regu = sess.run([cost, loss, regularizer],
+                c, l, r = sess.run([cost, loss, regularizer],
                                             feed_dict={x: source,
-                                                       y: target,
-                                                       gamma: gamma})
+                                                       y: target})
                 print '{i} samples fed in: validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
                     i=sample_counter,
                     n=len(validation_set),
-                    c=cost,
-                    l=loss,
-                    r=regu
+                    c=c,
+                    l=l,
+                    r=r
                 )
 
             selected_idx = np.random.permutation(n_sample)[0 : batch_size]
@@ -190,11 +196,17 @@ if __name__ == '__main__':
             source, target = vectorise_list_of_pairs(batch_pairs, n_input, n_output, n_step_input, n_step_output)
             train_step.run(feed_dict={
                 x: source,
-                y: target,
-                learning_rate: learning_rate,
-                gamma: gamma})
+                y: target})
             sample_counter += len(batch_pairs)
-
+            if i % int(save_param_steps) == 0:
+                parameters = dict()
+                for k, v in variables.iteritems():
+                    parameters[k] = sess.run(v)
+                cPickle.dump(parameters, open('parameters_{}.pkl'.format(i), 'wb'))
+        parameters = dict()
+        for k, v in variables.iteritems():
+            parameters[k] = sess.run(v)
+        cPickle.dump(parameters, open('parameters_final.pkl', 'wb'))
     sess.close()
 
 
