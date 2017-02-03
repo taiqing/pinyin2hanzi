@@ -95,8 +95,8 @@ if __name__ == '__main__':
     n_output = 1103
     n_step_input = 44
     n_step_output = 13
-    n_hidden = 128#256
-    weight_stddev = 0.1
+    n_hidden = 128#1024
+    weight_stddev = None #0.1
     n_epoch = 10
     batch_size = 100
     validation_steps = 100
@@ -175,35 +175,36 @@ if __name__ == '__main__':
     print '{} training samples'.format(n_sample)
     sess = tf.Session()
     with sess.as_default():
-       init_vars.run()
-       sample_counter = 0
-       for i in range(int(n_epoch * n_sample / batch_size)):
-           if i % int(validation_steps) == 0:
-               source, target = vectorise_list_of_pairs(validation_set,
-                                                        vocab_source, vocab_target,
-                                                        n_input, n_output, n_step_input, n_step_output)
-               c, l, r = sess.run([cost, loss, regularizer],
-                                           feed_dict={x: source,
-                                                      y: target})
-               print '{i} samples fed in: validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
-                   i=sample_counter, n=len(validation_set), c=c, l=l, r=r)
+      init_vars.run()
+      sample_counter = 0
+      for i in range(int(n_epoch * n_sample / batch_size)):
+          if i % int(validation_steps) == 0:
+              source, target = vectorise_list_of_pairs(validation_set,
+                                                       vocab_source, vocab_target,
+                                                       n_input, n_output, n_step_input, n_step_output)
+              c, l, r = sess.run([cost, loss, regularizer],
+                                          feed_dict={x: source,
+                                                     y: target})
+              print '{i} samples fed in: validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
+                  i=sample_counter, n=len(validation_set), c=c, l=l, r=r)
 
-           selected_idx = np.random.permutation(n_sample)[0 : batch_size]
-           batch_pairs = [train_set[k] for k in selected_idx]
-           source, target = vectorise_list_of_pairs(batch_pairs,
-                                                    vocab_source, vocab_target,
-                                                    n_input, n_output, n_step_input, n_step_output)
-           train_step.run(feed_dict={x: source, y: target})
-           sample_counter += len(batch_pairs)
-           if i % int(save_param_steps) == 0:
-               parameters = dict()
-               for k, v in variables.iteritems():
-                   parameters[k] = sess.run(v)
-               cPickle.dump(parameters, open('models/parameters_{}.pkl'.format(i), 'wb'))
-       parameters = dict()
-       for k, v in variables.iteritems():
-           parameters[k] = sess.run(v)
-       cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
+          selected_idx = np.random.permutation(n_sample)[0 : batch_size]
+          batch_pairs = [train_set[k] for k in selected_idx]
+          source, target = vectorise_list_of_pairs(batch_pairs,
+                                                   vocab_source, vocab_target,
+                                                   n_input, n_output, n_step_input, n_step_output)
+          _, c, l, r = sess.run([train_step, cost, loss, regularizer], feed_dict={x: source, y: target})
+          print '{i}-th batch, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(i=i, c=c, l=l, r=r)
+          sample_counter += len(batch_pairs)
+          if i % int(save_param_steps) == 0:
+              parameters = dict()
+              for k, v in variables.iteritems():
+                  parameters[k] = sess.run(v)
+              cPickle.dump(parameters, open('models/parameters_{}.pkl'.format(i), 'wb'))
+      parameters = dict()
+      for k, v in variables.iteritems():
+          parameters[k] = sess.run(v)
+      cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
     sess.close()
 
     # parameters = cPickle.load(open('models/parameters_final.pkl', 'rb'))
