@@ -73,34 +73,36 @@ class GRUCell(object):
         return new_h
 
 
-def vectorise_list_of_pairs(pairs, n_input, n_output, n_step_input, n_step_output):
+def vectorise_list_of_pairs(pairs, vocab_source, vocab_target, n_input, n_output, n_step_input, n_step_output):
     source = np.zeros((len(pairs), n_step_input, n_input), np.float32)
     target = np.zeros((len(pairs), n_step_output, n_output), np.float32)
     for j, pair in zip(range(len(pairs)), pairs):
         s, t = pair
         for k, x in zip(range(len(s)), s):
-            source[j, k, x] = 1
+            source[j, k, vocab_source[x]] = 1
         for k, x in zip(range(len(t)), t):
-            target[j, k, x] = 1
+            target[j, k, vocab_target[x]] = 1
     return source, target
+
 
 if __name__ == '__main__':
     np.random.seed(1001)
 
-    dataset_file = 'dataset/vectorised_dataset.pkl'
+    dataset_file = 'dataset/dataset.pkl'
     vocab_file = 'dataset/vocab.pkl'
 
     n_input = 28
     n_output = 1103
     n_step_input = 44
     n_step_output = 13
-    n_hidden = 512
+    n_hidden = 128#256
     weight_stddev = 0.1
-    n_epoch = 20
+    n_epoch = 10
     batch_size = 100
     validation_steps = 100
+    validation_portion = 0.02
     save_param_steps = 100
-    learning_rate = 1e-2
+    learning_rate = 1e-3
     gamma = 1e-3
 
     encoder_cell = GRUCell(n_input, n_hidden, weight_stddev, name='encoder:0')
@@ -152,61 +154,70 @@ if __name__ == '__main__':
     init_vars = tf.global_variables_initializer()
 
     vocab_source, vocab_target = cPickle.load(open(vocab_file, 'rb'))
+    vocab_source_r = dict()
+    for k, v in vocab_source.iteritems():
+        vocab_source_r[v] = k
+    vocab_target_r = dict()
+    for k, v in vocab_target.iteritems():
+        vocab_target_r[v] = k
 
     dataset = cPickle.load(open(dataset_file, 'rb'))
 
     # validation set
     n_sample = len(dataset)
     permutation = np.random.permutation(n_sample)
-    selected_idx = permutation[0: n_sample/20]
+    selected_idx = permutation[0: int(n_sample * validation_portion)]
     validation_set = [dataset[k] for k in selected_idx]
-    selected_idx = permutation[n_sample/20 :]
+    selected_idx = permutation[int(n_sample * validation_portion) :]
     train_set = [dataset[k] for k in selected_idx]
 
     n_sample = len(train_set)
+    print '{} training samples'.format(n_sample)
     sess = tf.Session()
     with sess.as_default():
-        init_vars.run()
-        #validation_set = validation_set[0:10]
-        #source, target = vectorise_list_of_pairs(validation_set, n_input, n_output, n_step_input, n_step_output)
-        #c, l, r = sess.run([cost, loss, regularizer], feed_dict={x: source, y: target})
-        #print 'validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
-        #    n=len(validation_set),
-        #    c=c,
-        #    l=l,
-        #    r=r
-        #)
-        sample_counter = 0
-        for i in range(int(n_epoch * n_sample / batch_size)):
-            if i % int(validation_steps) == 0:
-                source, target = vectorise_list_of_pairs(validation_set, n_input, n_output, n_step_input, n_step_output)
-                c, l, r = sess.run([cost, loss, regularizer],
-                                            feed_dict={x: source,
-                                                       y: target})
-                print '{i} samples fed in: validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
-                    i=sample_counter,
-                    n=len(validation_set),
-                    c=c,
-                    l=l,
-                    r=r
-                )
+       init_vars.run()
+       sample_counter = 0
+       for i in range(int(n_epoch * n_sample / batch_size)):
+           if i % int(validation_steps) == 0:
+               source, target = vectorise_list_of_pairs(validation_set,
+                                                        vocab_source, vocab_target,
+                                                        n_input, n_output, n_step_input, n_step_output)
+               c, l, r = sess.run([cost, loss, regularizer],
+                                           feed_dict={x: source,
+                                                      y: target})
+               print '{i} samples fed in: validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
+                   i=sample_counter, n=len(validation_set), c=c, l=l, r=r)
 
-            selected_idx = np.random.permutation(n_sample)[0 : batch_size]
-            batch_pairs = [train_set[k] for k in selected_idx]
-            source, target = vectorise_list_of_pairs(batch_pairs, n_input, n_output, n_step_input, n_step_output)
-            train_step.run(feed_dict={
-                x: source,
-                y: target})
-            sample_counter += len(batch_pairs)
-            if i % int(save_param_steps) == 0:
-                parameters = dict()
-                for k, v in variables.iteritems():
-                    parameters[k] = sess.run(v)
-                cPickle.dump(parameters, open('parameters_{}.pkl'.format(i), 'wb'))
-        parameters = dict()
-        for k, v in variables.iteritems():
-            parameters[k] = sess.run(v)
-        cPickle.dump(parameters, open('parameters_final.pkl', 'wb'))
+           selected_idx = np.random.permutation(n_sample)[0 : batch_size]
+           batch_pairs = [train_set[k] for k in selected_idx]
+           source, target = vectorise_list_of_pairs(batch_pairs,
+                                                    vocab_source, vocab_target,
+                                                    n_input, n_output, n_step_input, n_step_output)
+           train_step.run(feed_dict={x: source, y: target})
+           sample_counter += len(batch_pairs)
+           if i % int(save_param_steps) == 0:
+               parameters = dict()
+               for k, v in variables.iteritems():
+                   parameters[k] = sess.run(v)
+               cPickle.dump(parameters, open('models/parameters_{}.pkl'.format(i), 'wb'))
+       parameters = dict()
+       for k, v in variables.iteritems():
+           parameters[k] = sess.run(v)
+       cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
     sess.close()
 
+    # parameters = cPickle.load(open('models/parameters_final.pkl', 'rb'))
+    # pair = train_set[1]
+    # source, target = vectorise_list_of_pairs([pair], vocab_source, vocab_target, n_input, n_output, n_step_input, n_step_output)
+    # feed_dict = dict()
+    # for k, v in variables.iteritems():
+    #     feed_dict[v] = parameters[k]
+    # feed_dict[x] = source
+    # feed_dict[y] = target
+    # sess = tf.Session()
+    # out = sess.run(outputs, feed_dict=feed_dict)
+    # pred = [vocab_target_r[d] for d in out[0].argmax(axis=1)]
+    # print "source: " + pair[0]
+    # print "target: " + pair[1]
+    # print "prediction: " + "".join(pred)
 
