@@ -7,7 +7,7 @@ import pypinyin
 from pypinyin import pinyin, lazy_pinyin
 
 from utils import *
-from config import min_hanzi_num, max_hanzi_num, max_nonhanzi_num
+from config import min_hanzi_num, max_hanzi_num, max_nonhanzi_num, nonhanzi_symbol
 
 
 def count_punctuations(ustring):
@@ -45,21 +45,22 @@ if __name__ == '__main__':
     with open(labeled_corpus_fpath, 'w') as labeled_corpus_file:
         with open(corpus_fpath, 'r') as corpus_file:
             for line in corpus_file:
-                try:
-                    line = line.decode('utf-8')[:-1] # remove \n
-                    line = replace_nonhanzi(line, nonhanzi_symbol)
-                    n_hanzi = count_hanzi(line)
-                    n_nonhanzi = len(line) - n_hanzi
-                    if n_hanzi >= min_hanzi_num and n_hanzi <= max_hanzi_num and n_nonhanzi <= max_nonhanzi_num:
-                        hanzi = ':'.join(['Z', line])
-                        labeled_corpus_file.write(hanzi.encode('utf-8'))
-                        labeled_corpus_file.write('\n')
-                        pinyin = ':'.join(['P', ''.join(lazy_pinyin(line))])
-                        #pinyin = ':'.join(['P', '-'.join(lazy_pinyin(line))])
-                        labeled_corpus_file.write(pinyin.encode('utf-8'))
-                        labeled_corpus_file.write('\n')
-                except:
-                    pass
+                #try:
+                line = line.decode('utf-8')[:-1] # remove \n
+                line = replace_nonhanzi(line, nonhanzi_symbol)
+                n_hanzi = count_hanzi(line)
+                n_nonhanzi = len(line) - n_hanzi
+                if n_hanzi >= min_hanzi_num and n_hanzi <= max_hanzi_num and n_nonhanzi <= max_nonhanzi_num:
+                    #pinyin = ':'.join(['P', ''.join(lazy_pinyin(line))])
+                    pinyin = ':'.join(['P', '-'.join(lazy_pinyin(line))])
+                    labeled_corpus_file.write(pinyin.encode('utf-8'))
+                    labeled_corpus_file.write('\n')
+                    
+                    hanzi = ':'.join(['Z', line])
+                    labeled_corpus_file.write(hanzi.encode('utf-8'))
+                    labeled_corpus_file.write('\n')
+                #except:
+                #    pass
                 i += 1
                 if i % 1000 == 0:
                     print '{} lines processed'.format(i)

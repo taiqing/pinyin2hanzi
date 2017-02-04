@@ -16,10 +16,10 @@ if __name__ == '__main__':
     with open(aligned_corpus_path, 'r') as f:
         for line in f:
             line = line.decode('utf-8')[:-1] # remove \n
-            if line.startswith('Z:'):
-                target = line[2:]
             if line.startswith('P:'):
                 source = line[2:]
+            if line.startswith('Z:'):
+                target = line[2:]
                 src_len.append(len(source))
                 target_len.append(len(target))
                 dataset.append((source, target))

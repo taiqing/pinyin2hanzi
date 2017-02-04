@@ -10,5 +10,4 @@ rare_word_symbol = '*'
 nonhanzi_symbol = '_'
 
 aligned_input_len = 44
-aligned_output_len = 13
 filling_symbol = '.'

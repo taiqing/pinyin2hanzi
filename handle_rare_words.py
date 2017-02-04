@@ -3,7 +3,7 @@
 import pandas as pd
 
 from utils import *
-from config import min_word_freq
+from config import min_word_freq, rare_word_symbol
 
 
 if __name__ == '__main__':
