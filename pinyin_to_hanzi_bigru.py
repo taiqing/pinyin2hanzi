@@ -107,7 +107,7 @@ if __name__ == '__main__':
     n_step_input = 44
     n_hidden = 256
     weight_stddev = 0.1
-    n_epoch = 5
+    n_epoch = 20
     batch_size = 100
     validation_steps = 100
     validation_portion = 0.025
@@ -192,44 +192,44 @@ if __name__ == '__main__':
     train_set = [dataset[k] for k in selected_idx]
     print '{tr} training samples, {v} validation samples, {te} test samples'.format(tr=len(train_set), v=len(validation_set), te=len(test_set))
 
-    # n_sample = len(train_set)
-    # sess = tf.Session()
-    # with sess.as_default():
-    #     init_vars.run()
-    #     sample_counter = 0
-    #     for i in range(int(n_epoch * n_sample / batch_size)):
-    #         if i % int(validation_steps) == 0:
-    #             source, target = vectorise_list_of_pairs(validation_set, vocab_source, vocab_target)
-    #             c, l, r = sess.run([cost, loss, regularizer],
-    #                                feed_dict={x: source,
-    #                                           y: target})
-    #             print '{i} samples fed in: validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
-    #                 i=sample_counter, n=len(validation_set), c=c, l=l, r=r)
-    #
-    #         if i % int(save_param_steps) == 0:
-    #             parameters = dict()
-    #             for k, v in variables.iteritems():
-    #                 parameters[k] = sess.run(v)
-    #             cPickle.dump(parameters, open('models/parameters_{}.pkl'.format(i), 'wb'))
-    #
-    #         selected_idx = np.random.permutation(n_sample)[0 : batch_size]
-    #         batch_pairs = [train_set[k] for k in selected_idx]
-    #         source, target = vectorise_list_of_pairs(batch_pairs, vocab_source, vocab_target)
-    #         _, c, l, r = sess.run([train_step, cost, loss, regularizer], feed_dict={x: source, y: target})
-    #         if verbose:
-    #             print '{i}-th batch, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(i=i, c=c, l=l, r=r)
-    #         sample_counter += len(batch_pairs)
-    #
-    #     parameters = dict()
-    #     for k, v in variables.iteritems():
-    #         parameters[k] = sess.run(v)
-    #     cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
-    #
-    #     # evaluate on test set
-    #     source, target = vectorise_list_of_pairs(test_set, vocab_source, vocab_target)
-    #     l = sess.run(loss, feed_dict={x: source, y: target})
-    #     print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
-    # sess.close()
+    n_sample = len(train_set)
+    sess = tf.Session()
+    with sess.as_default():
+        init_vars.run()
+        sample_counter = 0
+        for i in range(int(n_epoch * n_sample / batch_size)):
+            if i % int(validation_steps) == 0:
+                source, target = vectorise_list_of_pairs(validation_set, vocab_source, vocab_target)
+                c, l, r = sess.run([cost, loss, regularizer],
+                                   feed_dict={x: source,
+                                              y: target})
+                print '{i} samples fed in: validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
+                    i=sample_counter, n=len(validation_set), c=c, l=l, r=r)
+
+            if i % int(save_param_steps) == 0:
+                parameters = dict()
+                for k, v in variables.iteritems():
+                    parameters[k] = sess.run(v)
+                cPickle.dump(parameters, open('models/parameters_{}.pkl'.format(i), 'wb'))
+
+            selected_idx = np.random.permutation(n_sample)[0 : batch_size]
+            batch_pairs = [train_set[k] for k in selected_idx]
+            source, target = vectorise_list_of_pairs(batch_pairs, vocab_source, vocab_target)
+            _, c, l, r = sess.run([train_step, cost, loss, regularizer], feed_dict={x: source, y: target})
+            if verbose:
+                print '{i}-th batch, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(i=i, c=c, l=l, r=r)
+            sample_counter += len(batch_pairs)
+
+        parameters = dict()
+        for k, v in variables.iteritems():
+            parameters[k] = sess.run(v)
+        cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
+
+        # evaluate on test set
+        source, target = vectorise_list_of_pairs(test_set, vocab_source, vocab_target)
+        l = sess.run(loss, feed_dict={x: source, y: target})
+        print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
+    sess.close()
 
     parameters = cPickle.load(open('models/parameters_final.pkl', 'rb'))
     # evaluate on test set
@@ -243,7 +243,7 @@ if __name__ == '__main__':
     l = sess.run(loss, feed_dict=feed_dict)
     print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
     
-    pair = test_set[1]
+    pair = test_set[1012]
     source, target = vectorise_list_of_pairs([pair], vocab_source, vocab_target)
     feed_dict = dict()
     for k, v in variables.iteritems():
@@ -257,19 +257,21 @@ if __name__ == '__main__':
     print "prediction: " + "".join(pred)
 
     # interactive testing
-    input = 'womennengyingdezhechangbisai'
-    aligned_input = input + filling_symbol * (aligned_input_len - len(input))
-    source = vectorise(aligned_input, vocab_source)
-    source = source.reshape((1, ) + source.shape)
-    feed_dict = dict()
-    for k, v in variables.iteritems():
-        feed_dict[v] = parameters[k]
-    feed_dict[x] = source
-    out = sess.run(outputs, feed_dict=feed_dict)
-    pred = [vocab_target_r[d] for d in out[0].argmax(axis=1)]
-    pred = "".join(pred)
-    pred = pred.replace('#', '')
-    pred = pred.strip('.')
-    print "source:     " + input
-    print "prediction: " + "".join(pred)
+    inputs = ['womenyouxinxinnengyingdezhechangbisai', 'youyujingyanbuzu', 'tebieshizuijin_nianlai']
+    for input in inputs:
+        aligned_input = input + filling_symbol * (aligned_input_len - len(input))
+        source = vectorise(aligned_input, vocab_source)
+        source = source.reshape((1, ) + source.shape)
+        feed_dict = dict()
+        for k, v in variables.iteritems():
+            feed_dict[v] = parameters[k]
+        feed_dict[x] = source
+        out = sess.run(outputs, feed_dict=feed_dict)
+        pred = [vocab_target_r[d] for d in out[0].argmax(axis=1)]
+        pred = "".join(pred)
+        pred = pred.replace('#', '')
+        pred = pred.strip('.')
+        print "source:     " + input
+        print "prediction: " + "".join(pred)
+        print ""
     
