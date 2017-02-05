@@ -73,22 +73,24 @@ class GRUCell(object):
         return new_h
 
 
-def vectorise_list_of_pairs(pairs, vocab_source, vocab_target, n_input, n_output, n_step_input):
-    source = np.zeros((len(pairs), n_step_input, n_input), np.float32)
-    target = np.zeros((len(pairs), n_step_input, n_output), np.float32)
-    for j, pair in zip(range(len(pairs)), pairs):
-        s, t = pair
-        for k, x in zip(range(len(s)), s):
-            source[j, k, vocab_source[x]] = 1
-        for k, x in zip(range(len(t)), t):
-            target[j, k, vocab_target[x]] = 1
-        #mark = False
-        #for k, x in zip(range(len(t)), t):
-        #    if x == '.' and mark is False:
-        #        target[j, k, vocab_target[x]] = 1
-        #        mark = True
-        #    if x != '.':
-        #        target[j, k, vocab_target[x]] = 1
+def vectorise(string, vocab):
+    coding = np.zeros((len(string), len(vocab)), np.float32)
+    for k, x in zip(range(len(string)), string):
+        coding[k, vocab[x]] = 1
+    return coding
+
+
+def vectorise_list_of_pairs(pairs, vocab_source, vocab_target):
+    """
+    The strings in pairs must be aligned, that is, their lengths are padded to the same
+    """
+    source = []
+    target = []
+    for s, t in pairs:
+        source.append(vectorise(s, vocab_source))
+        target.append(vectorise(t, vocab_target))
+    source = np.stack(source, axis=0)
+    target = np.stack(target, axis=0)
     return source, target
 
 
@@ -196,9 +198,7 @@ if __name__ == '__main__':
         sample_counter = 0
         for i in range(int(n_epoch * n_sample / batch_size)):
             if i % int(validation_steps) == 0:
-                source, target = vectorise_list_of_pairs(validation_set,
-                                                         vocab_source, vocab_target,
-                                                         n_input, n_output, n_step_input)
+                source, target = vectorise_list_of_pairs(validation_set, vocab_source, vocab_target)
                 c, l, r = sess.run([cost, loss, regularizer],
                                    feed_dict={x: source,
                                               y: target})
@@ -210,12 +210,10 @@ if __name__ == '__main__':
                 for k, v in variables.iteritems():
                     parameters[k] = sess.run(v)
                 cPickle.dump(parameters, open('models/parameters_{}.pkl'.format(i), 'wb'))
-                
+
             selected_idx = np.random.permutation(n_sample)[0 : batch_size]
             batch_pairs = [train_set[k] for k in selected_idx]
-            source, target = vectorise_list_of_pairs(batch_pairs,
-                                                     vocab_source, vocab_target,
-                                                     n_input, n_output, n_step_input)
+            source, target = vectorise_list_of_pairs(batch_pairs, vocab_source, vocab_target)
             _, c, l, r = sess.run([train_step, cost, loss, regularizer], feed_dict={x: source, y: target})
             if verbose:
                 print '{i}-th batch, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(i=i, c=c, l=l, r=r)
@@ -225,20 +223,27 @@ if __name__ == '__main__':
         for k, v in variables.iteritems():
             parameters[k] = sess.run(v)
         cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
-        
+
         # evaluate on test set
-        source, target = vectorise_list_of_pairs(test_set,
-                                            vocab_source, vocab_target,
-                                            n_input, n_output, n_step_input)
+        source, target = vectorise_list_of_pairs(test_set, vocab_source, vocab_target)
         l = sess.run(loss, feed_dict={x: source, y: target})
         print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
-        
     sess.close()
 
     parameters = cPickle.load(open('models/parameters_final.pkl', 'rb'))
+    # evaluate on test set
+    source, target = vectorise_list_of_pairs(test_set, vocab_source, vocab_target)
     sess = tf.Session()
-    pair = train_set[1]
-    source, target = vectorise_list_of_pairs([pair], vocab_source, vocab_target, n_input, n_output, n_step_input)
+    feed_dict = dict()
+    for k, v in variables.iteritems():
+        feed_dict[v] = parameters[k]
+    feed_dict[x] = source
+    feed_dict[y] = target
+    l = sess.run(loss, feed_dict=feed_dict)
+    print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
+    
+    pair = test_set[1]
+    source, target = vectorise_list_of_pairs([pair], vocab_source, vocab_target)
     feed_dict = dict()
     for k, v in variables.iteritems():
         feed_dict[v] = parameters[k]
@@ -249,4 +254,3 @@ if __name__ == '__main__':
     print "source:     " + pair[0]
     print "target:     " + pair[1]
     print "prediction: " + "".join(pred)
-
