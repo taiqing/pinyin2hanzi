@@ -1,4 +1,4 @@
-## A Gated Recurrent Neural Network for End-to-End Translation Chinese Pinyin
+## A Gated Recurrent Neural Network for End-to-End Translation of Chinese Pinyin
 
 setup_corpus.py
 -->
