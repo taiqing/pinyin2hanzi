@@ -101,17 +101,20 @@ if __name__ == '__main__':
     n_input = 28
     n_output = 1104
     n_step_input = 44
-    n_hidden = 128
+    n_hidden = 256
     weight_stddev = 0.1
-    n_epoch = 1
+    n_epoch = 5
     batch_size = 100
     validation_steps = 100
-    validation_portion = 0.02
+    validation_portion = 0.025
+    test_portion = 0.025
     save_param_steps = 100
     learning_rate = 1e-2
-    gamma = 1e-3
+    gamma = 1e-1
     verbose = True
-
+    
+    # -- build the graph -- 
+    
     encoder_cell = GRUCell(n_input, n_hidden, weight_stddev, name='encoder:0')
     encoder_cell_r = GRUCell(n_input, n_hidden, weight_stddev, name='encoder:1')
     W_o = weight_variable_normal([2 * n_hidden, n_output], weight_stddev)
@@ -150,7 +153,7 @@ if __name__ == '__main__':
     outputs = tf.pack(outputs, axis=1)  # outputs: n_samples x n_step x n_output
 
     # loss
-    loss = -tf.reduce_mean(tf.log(outputs) * y)
+    loss = -tf.reduce_sum(tf.log(outputs) * y) / (tf.cast(n_sample, tf.float32) * n_step_input)
 
     # l2-norm of paramters
     regularizer = 0.
@@ -162,6 +165,8 @@ if __name__ == '__main__':
     train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 
     init_vars = tf.global_variables_initializer()
+    
+    # -- run the graph --
 
     vocab_source, vocab_target = cPickle.load(open(vocab_file, 'rb'))
     vocab_source_r = dict()
@@ -173,13 +178,15 @@ if __name__ == '__main__':
 
     dataset = cPickle.load(open(dataset_file, 'rb'))
 
-    # validation set
     n_sample = len(dataset)
     permutation = np.random.permutation(n_sample)
     selected_idx = permutation[0: int(n_sample * validation_portion)]
     validation_set = [dataset[k] for k in selected_idx]
-    selected_idx = permutation[int(n_sample * validation_portion) :]
+    selected_idx = permutation[int(n_sample * validation_portion) : int(n_sample * validation_portion) + int(n_sample * test_portion)]
+    test_set = [dataset[k] for k in selected_idx]
+    selected_idx = permutation[int(n_sample * validation_portion) + int(n_sample * test_portion) : ]
     train_set = [dataset[k] for k in selected_idx]
+    print '{tr} training samples, {v} validation samples, {te} test samples'.format(tr=len(train_set), v=len(validation_set), te=len(test_set))
 
     n_sample = len(train_set)
     print '{} training samples'.format(n_sample)
@@ -203,7 +210,6 @@ if __name__ == '__main__':
                 for k, v in variables.iteritems():
                     parameters[k] = sess.run(v)
                 cPickle.dump(parameters, open('models/parameters_{}.pkl'.format(i), 'wb'))
-                #break
                 
             selected_idx = np.random.permutation(n_sample)[0 : batch_size]
             batch_pairs = [train_set[k] for k in selected_idx]
@@ -219,9 +225,18 @@ if __name__ == '__main__':
         for k, v in variables.iteritems():
             parameters[k] = sess.run(v)
         cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
+        
+        # evaluate on test set
+        source, target = vectorise_list_of_pairs(test_set,
+                                            vocab_source, vocab_target,
+                                            n_input, n_output, n_step_input)
+        l = sess.run(loss, feed_dict={x: source, y: target})
+        print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
+        
     sess.close()
 
     parameters = cPickle.load(open('models/parameters_final.pkl', 'rb'))
+    sess = tf.Session()
     pair = train_set[1]
     source, target = vectorise_list_of_pairs([pair], vocab_source, vocab_target, n_input, n_output, n_step_input)
     feed_dict = dict()
@@ -229,7 +244,6 @@ if __name__ == '__main__':
         feed_dict[v] = parameters[k]
     feed_dict[x] = source
     feed_dict[y] = target
-    sess = tf.Session()
     out = sess.run(outputs, feed_dict=feed_dict)
     pred = [vocab_target_r[d] for d in out[0].argmax(axis=1)]
     print "source:     " + pair[0]
