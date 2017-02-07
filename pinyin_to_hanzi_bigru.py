@@ -120,7 +120,7 @@ if __name__ == '__main__':
 
     dataset_file = 'dataset/dataset.pkl'
     vocab_file = 'dataset/vocab.pkl'
-
+    
     n_input = 28
     n_output = 1104
     n_step_input = 44
@@ -136,7 +136,8 @@ if __name__ == '__main__':
     gamma = 1e-1
     verbose = True
     
-    # -- build the graph -- 
+    # -- build the graph --
+    # TODO: use Class to scope the tensors
     
     encoder_cell = GRUCell(n_input, n_hidden, weight_stddev, name='encoder:0')
     encoder_cell_r = GRUCell(n_input, n_hidden, weight_stddev, name='encoder:1')
