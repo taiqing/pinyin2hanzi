@@ -9,16 +9,17 @@ import tensorflow as tf
 from config import filling_symbol, aligned_input_len
 
 
-def join_dicts(dict1, dict2):
+def join_dicts(dict_list):
     """
     Raise exception if two dicts share some keys
     """
-    dict_ret = dict1.copy()
-    for k, v in dict2.iteritems():
-        if k not in dict_ret:
-            dict_ret[k] = v
-        else:
-            raise Exception('Key conflicts in join_dicts')
+    dict_ret = dict()
+    for d in dict_list:
+        for k, v in d.iteritems():
+            if k not in dict_ret:
+                dict_ret[k] = v
+            else:
+                raise Exception('Key conflicts in join_dicts')
     return dict_ret
 
 
@@ -51,7 +52,7 @@ class GRUCell(object):
             self.W_c = tf.Variable(variable_values[':'.join([name, 'W_c'])])
             self.b_c = tf.Variable(variable_values[':'.join([name, 'b_c'])])
 
-        self.vars = {':'.join([name, 'W_z']): self.W_z,
+        self.variables = {':'.join([name, 'W_z']): self.W_z,
                      ':'.join([name, 'b_z']): self.b_z,
                      ':'.join([name, 'W_r']): self.W_r,
                      ':'.join([name, 'b_r']): self.b_r,
@@ -124,7 +125,8 @@ if __name__ == '__main__':
     n_input = 28
     n_output = 1104
     n_step_input = 44
-    n_hidden = 256
+    n_layer = 2
+    n_hidden = [256, 128]
     weight_stddev = 0.1
     n_epoch = 20
     batch_size = 100
@@ -137,61 +139,70 @@ if __name__ == '__main__':
     verbose = True
     
     # -- build the graph --
-    class Graph:
-        encoder_cell = GRUCell(n_input, n_hidden, weight_stddev, name='encoder:0')
-        encoder_cell_r = GRUCell(n_input, n_hidden, weight_stddev, name='encoder:1')
-        W_o = weight_variable_normal([2 * n_hidden, n_output], weight_stddev)
-        b_o = tf.Variable(np.zeros(n_output, dtype=np.float32))
-        variables = join_dicts(join_dicts(encoder_cell.vars, encoder_cell_r.vars), {'W_o': W_o, 'b_o': b_o})
-    
-        x = tf.placeholder(tf.float32, [None, n_step_input, n_input], name='x')
-        y = tf.placeholder(tf.float32, [None, n_step_input, n_output], name='y')
-        #learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-        #gamma = tf.placeholder(tf.float32, name='gamma')
+    x = tf.placeholder(tf.float32, [None, n_step_input, n_input], name='x')
+    y = tf.placeholder(tf.float32, [None, n_step_input, n_output], name='y')
 
-        # encoding
-        n_sample = tf.shape(x)[0]
-        h_init = tf.zeros((n_sample, n_hidden), tf.float32)
-        encoder_states = []
-        for i in range(n_step_input):
-            h_prev = h_init if i == 0 else encoder_states[-1]
-            x_t = x[:, i, :]
-            h_t = encoder_cell(h_prev, x_t)
-            encoder_states.append(h_t)
+    encoder_cells = []
+    encoder_r_cells = []
+    variables = dict()
+    for l in range(n_layer):
+        input_size = n_input if l == 0 else n_hidden[l - 1]
+        layer_size = n_hidden[l]
+        encoder = GRUCell(input_size, layer_size, weight_stddev, name='encoder:{}'.format(l))
+        encoder_r = GRUCell(input_size, layer_size, weight_stddev, name='encoder_r:{}'.format(l))
+        variables = join_dicts([variables, encoder.variables, encoder_r.variables])
+        encoder_cells.append(encoder)
+        encoder_r_cells.append(encoder_r)
+    W_o = weight_variable_normal([2 * n_hidden[-1], n_output], weight_stddev)
+    b_o = tf.Variable(np.zeros(n_output, dtype=np.float32))
+    variables = join_dicts([variables, {'W_o': W_o, 'b_o': b_o}])
 
-        encoder_states_r = []
-        for i in range(n_step_input):
-            h_prev = h_init if i == 0 else encoder_states_r[-1]
-            x_t = x[:, n_step_input - i - 1, :] # read the input in reverse order
-            h_t = encoder_cell_r(h_prev, x_t)
-            encoder_states_r.append(h_t)
-        encoder_states_r = encoder_states_r[::-1]
+    # encoding
+    n_sample = tf.shape(x)[0]
 
-        # decoding
-        outputs = list()
-        for i in range(n_step_input):
-            h_t = tf.concat(1, [encoder_states[i], encoder_states_r[i]])
-            out_t = tf.nn.softmax(tf.matmul(h_t, W_o) + b_o)
-            outputs.append(out_t)
-        outputs = tf.pack(outputs, axis=1)  # outputs: n_samples x n_step x n_output
-        predictions = tf.argmax(outputs, axis=2, name='predictions') # predictions: n_samples x n_step
+    def build_encoder_layers(reverse_input=False):
+        inputs = tf.unstack(x, axis=1)
+        if reverse_input: inputs = inputs[::-1]
+        states_layers = []
+        for l in range(n_layer):
+            states_prev = inputs if l == 0 else states_layers[l - 1]
+            states = []
+            h_init = tf.zeros((n_sample, n_hidden[l]), tf.float32)
+            for t in range(n_step_input):
+                h_prev = h_init if t == 0 else states[-1]
+                input_t = states_prev[t]
+                h_t = encoder_cells[l](h_prev, input_t)
+                states.append(h_t)
+            states_layers.append(states)
+        return states_layers
 
-        # loss
-        loss = -tf.reduce_sum(tf.log(outputs) * y) / (tf.cast(n_sample, tf.float32) * n_step_input)
+    states_layers = build_encoder_layers()
+    states_r_layers = build_encoder_layers(reverse_input=True)
 
-        # l2-norm of paramters
-        regularizer = 0.
-        for k, v in variables.iteritems():
-            regularizer += tf.reduce_mean(tf.square(v))
+    # decoding
+    outputs = list()
+    for t in range(n_step_input):
+        h_t = tf.concat(1, [states_layers[-1][t], states_r_layers[-1][-t-1]])
+        out_t = tf.nn.softmax(tf.matmul(h_t, W_o) + b_o)
+        outputs.append(out_t)
+    outputs = tf.pack(outputs, axis=1)  # outputs: n_samples x n_step x n_output
+    predictions = tf.argmax(outputs, axis=2, name='predictions') # predictions: n_samples x n_step
 
-        # cost
-        cost = loss + gamma * regularizer
-        train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+    # loss
+    loss = -tf.reduce_sum(tf.log(outputs) * y) / (tf.cast(n_sample, tf.float32) * n_step_input)
 
-        init_vars = tf.global_variables_initializer()
+    # l2-norm of paramters
+    regularizer = 0.
+    for k, v in variables.iteritems():
+        regularizer += tf.reduce_mean(tf.square(v))
+
+    # cost
+    cost = loss + gamma * regularizer
+    train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+
+    init_vars = tf.global_variables_initializer()
     
     # -- run the graph --
-
     vocab_source, vocab_target = cPickle.load(open(vocab_file, 'rb'))
     vocab_source_r = dict()
     for k, v in vocab_source.iteritems():
@@ -215,39 +226,39 @@ if __name__ == '__main__':
     n_sample = len(train_set)
     sess = tf.Session()
     with sess.as_default():
-        Graph.init_vars.run()
+        init_vars.run()
         sample_counter = 0
         for i in range(int(n_epoch * n_sample / batch_size)):
             if i % int(validation_steps) == 0:
                 source, target = vectorise_list_of_pairs(validation_set, vocab_source, vocab_target)
-                c, l, r = sess.run([Graph.cost, Graph.loss, Graph.regularizer],
-                                   feed_dict={Graph.x: source,
-                                              Graph.y: target})
+                c, l, r = sess.run([cost, loss, regularizer],
+                                   feed_dict={x: source,
+                                              y: target})
                 print '{i} samples fed in: validation: {n} samples, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(
                     i=sample_counter, n=len(validation_set), c=c, l=l, r=r)
 
             if i % int(save_param_steps) == 0:
                 parameters = dict()
-                for k, v in Graph.variables.iteritems():
+                for k, v in variables.iteritems():
                     parameters[k] = sess.run(v)
                 cPickle.dump(parameters, open('models/parameters_{}.pkl'.format(i), 'wb'))
 
             selected_idx = np.random.permutation(n_sample)[0 : batch_size]
             batch_pairs = [train_set[k] for k in selected_idx]
             source, target = vectorise_list_of_pairs(batch_pairs, vocab_source, vocab_target)
-            _, c, l, r = sess.run([Graph.train_step, Graph.cost, Graph.loss, Graph.regularizer], feed_dict={Graph.x: source, Graph.y: target})
+            _, c, l, r = sess.run([train_step, cost, loss, regularizer], feed_dict={x: source, y: target})
             if verbose:
                 print '{i}-th batch, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(i=i, c=c, l=l, r=r)
             sample_counter += len(batch_pairs)
 
         parameters = dict()
-        for k, v in Graph.variables.iteritems():
+        for k, v in variables.iteritems():
             parameters[k] = sess.run(v)
         cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
 
         # evaluate on test set
         source, target = vectorise_list_of_pairs(test_set, vocab_source, vocab_target)
-        l = sess.run(Graph.loss, feed_dict={Graph.x: source, Graph.y: target})
+        l = sess.run(loss, feed_dict={x: source, y: target})
         print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
     sess.close()
 
@@ -256,11 +267,11 @@ if __name__ == '__main__':
     source, target = vectorise_list_of_pairs(test_set, vocab_source, vocab_target)
     sess = tf.Session()
     feed_dict = dict()
-    for k, v in Graph.variables.iteritems():
+    for k, v in variables.iteritems():
         feed_dict[v] = parameters[k]
-    feed_dict[Graph.x] = source
-    feed_dict[Graph.y] = target
-    l, pred = sess.run([Graph.loss, Graph.predictions], feed_dict=feed_dict)
+    feed_dict[x] = source
+    feed_dict[y] = target
+    l, pred = sess.run([loss, predictions], feed_dict=feed_dict)
     print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
     edit_num = 0
     char_num = 0
@@ -273,15 +284,15 @@ if __name__ == '__main__':
         char_num += len(t)
     print '{c} hanzi, {e} edits, error rate is {er:.2f}%'.format(c=char_num, e=edit_num, er=100. * edit_num / char_num)
     print ''
-    
+
     pair = test_set[1000]
     source, target = vectorise_list_of_pairs([pair], vocab_source, vocab_target)
     feed_dict = dict()
-    for k, v in Graph.variables.iteritems():
+    for k, v in variables.iteritems():
         feed_dict[v] = parameters[k]
-    feed_dict[Graph.x] = source
-    feed_dict[Graph.y] = target
-    pred = sess.run(Graph.predictions, feed_dict=feed_dict)
+    feed_dict[x] = source
+    feed_dict[y] = target
+    pred = sess.run(predictions, feed_dict=feed_dict)
     pred = "".join([vocab_target_r[d] for d in pred[0]])
     pred = pred.replace('#', '').strip('.')
     source = pair[0]
@@ -291,8 +302,8 @@ if __name__ == '__main__':
     print "prediction: " + pred
     print 'edit dist is {}'.format(edit_distance(target, pred))
     print ''
-    
-    
+
+
     # interactive testing
     inputs = ['womenyouxinxinnengyingdezhechangbisai', 'youyujingyanbuzu', 'tebieshizuijin_nianlai']
     for input in inputs:
@@ -300,14 +311,13 @@ if __name__ == '__main__':
         source = vectorise(aligned_input, vocab_source)
         source = source.reshape((1, ) + source.shape)
         feed_dict = dict()
-        for k, v in Graph.variables.iteritems():
+        for k, v in variables.iteritems():
             feed_dict[v] = parameters[k]
-        feed_dict[Graph.x] = source
-        pred = sess.run(Graph.predictions, feed_dict=feed_dict)
+        feed_dict[x] = source
+        pred = sess.run(predictions, feed_dict=feed_dict)
         pred = "".join([vocab_target_r[d] for d in pred[0]])
         pred = pred.replace('#', '')
         pred = pred.strip('.')
         print "source:     " + input
         print "prediction: " + "".join(pred)
         print ""
-    
