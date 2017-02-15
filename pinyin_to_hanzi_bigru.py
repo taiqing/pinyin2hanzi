@@ -4,7 +4,6 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import array_ops
 import cPickle
-import tensorflow as tf
 
 from config import filling_symbol, aligned_input_len
 
@@ -30,19 +29,26 @@ def weight_variable_normal(shape, stddev=None):
     return tf.Variable(initial)
 
 
+def weight_variable_uniform(shape, radius=None):
+    if radius is None:
+        radius = 1.0 / np.sqrt(shape[0])
+    initial = tf.random_uniform(shape=shape, minval=-radius, maxval=radius)
+    return tf.Variable(initial)
+
+
 class GRUCell(object):
     # GRU description in http://colah.github.io/posts/2015-08-Understanding-LSTMs/
 
     def __init__(self, n_input, n_hidden, stddev=None, variable_values=None, name='GRU'):
         if variable_values is None:
             # update gate
-            self.W_z = weight_variable_normal([n_input + n_hidden, n_hidden], stddev)
+            self.W_z = weight_variable_uniform([n_input + n_hidden, n_hidden], stddev)
             self.b_z = tf.Variable(tf.zeros(n_hidden, tf.float32))
             # reset gate
-            self.W_r = weight_variable_normal([n_input + n_hidden, n_hidden], stddev)
+            self.W_r = weight_variable_uniform([n_input + n_hidden, n_hidden], stddev)
             self.b_r = tf.Variable(tf.zeros(n_hidden, tf.float32))
             # candidate generation
-            self.W_c = weight_variable_normal([n_input + n_hidden, n_hidden], stddev)
+            self.W_c = weight_variable_uniform([n_input + n_hidden, n_hidden], stddev)
             self.b_c = tf.Variable(tf.zeros(n_hidden, tf.float32))
         else:
             self.W_z = tf.Variable(variable_values[':'.join([name, 'W_z'])])
@@ -51,13 +57,15 @@ class GRUCell(object):
             self.b_r = tf.Variable(variable_values[':'.join([name, 'b_r'])])
             self.W_c = tf.Variable(variable_values[':'.join([name, 'W_c'])])
             self.b_c = tf.Variable(variable_values[':'.join([name, 'b_c'])])
-
+        self.n_input = n_input
+        self.n_hidden = n_hidden
         self.variables = {':'.join([name, 'W_z']): self.W_z,
                      ':'.join([name, 'b_z']): self.b_z,
                      ':'.join([name, 'W_r']): self.W_r,
                      ':'.join([name, 'b_r']): self.b_r,
                      ':'.join([name, 'W_c']): self.W_c,
                      ':'.join([name, 'b_c']): self.b_c}
+
 
     def __call__(self, h, x):
         """
@@ -74,6 +82,33 @@ class GRUCell(object):
         h_candidate = tf.tanh(tf.matmul(array_ops.concat(1, [r * h, x]), self.W_c) + self.b_c)
         new_h = (1 - z) * h + z * h_candidate
         return new_h
+
+
+def build_encoder_layers(input, n_step_input, encoder_layers, reverse_input=False):
+    """
+
+    :param input: n_sample x n_input_step x n_input
+    :param encoder_layers:
+    :param reverse_input:
+    :return:
+    """
+    n_sample = tf.shape(input)[0]
+    n_layer = len(encoder_layers)
+    input_list = tf.unstack(input, axis=1)
+    if reverse_input: input_list = input_list[::-1]
+    states_layers = []
+    for l in range(n_layer):
+        states_prev = input_list if l == 0 else states_layers[-1]
+        encoder = encoder_layers[l]
+        h_init = tf.zeros((n_sample, encoder.n_hidden), tf.float32)
+        states = []
+        for t in range(n_step_input):
+            h_prev = h_init if t == 0 else states[-1]
+            input_t = states_prev[t]
+            h_t = encoder(h_prev, input_t)
+            states.append(h_t)
+        states_layers.append(states)
+    return states_layers
 
 
 def vectorise(string, vocab):
@@ -116,7 +151,7 @@ def edit_distance(input_x, input_y):
     return dp[xlen - 1][ylen - 1]
     
 
-if __name__ == '__main__':
+def main():
     np.random.seed(1001)
 
     dataset_file = 'dataset/dataset.pkl'
@@ -125,25 +160,25 @@ if __name__ == '__main__':
     n_input = 28
     n_output = 1104
     n_step_input = 44
-    n_layer = 2
-    n_hidden = [256, 128]
+    n_hidden = [256]
+    n_layer = len(n_hidden)
     weight_stddev = 0.1
-    n_epoch = 20
+    n_epoch = 10
     batch_size = 100
     validation_steps = 100
     validation_portion = 0.025
     test_portion = 0.025
     save_param_steps = 100
     learning_rate = 1e-2
-    gamma = 1e-1
-    verbose = True
+    gamma = 1.
+    verbose = False
     
     # -- build the graph --
-    x = tf.placeholder(tf.float32, [None, n_step_input, n_input], name='x')
+    x = tf.placeholder(tf.float32, [None, n_step_input, n_input], name='x')  # n_sample x n_input_step x n_input
     y = tf.placeholder(tf.float32, [None, n_step_input, n_output], name='y')
 
-    encoder_cells = []
-    encoder_r_cells = []
+    encoder_layers = []
+    encoder_r_layers = []
     variables = dict()
     for l in range(n_layer):
         input_size = n_input if l == 0 else n_hidden[l - 1]
@@ -151,33 +186,16 @@ if __name__ == '__main__':
         encoder = GRUCell(input_size, layer_size, weight_stddev, name='encoder:{}'.format(l))
         encoder_r = GRUCell(input_size, layer_size, weight_stddev, name='encoder_r:{}'.format(l))
         variables = join_dicts([variables, encoder.variables, encoder_r.variables])
-        encoder_cells.append(encoder)
-        encoder_r_cells.append(encoder_r)
-    W_o = weight_variable_normal([2 * n_hidden[-1], n_output], weight_stddev)
+        encoder_layers.append(encoder)
+        encoder_r_layers.append(encoder_r)
+    W_o = weight_variable_uniform([2 * n_hidden[-1], n_output], weight_stddev)
     b_o = tf.Variable(np.zeros(n_output, dtype=np.float32))
     variables = join_dicts([variables, {'W_o': W_o, 'b_o': b_o}])
 
     # encoding
     n_sample = tf.shape(x)[0]
-
-    def build_encoder_layers(reverse_input=False):
-        inputs = tf.unstack(x, axis=1)
-        if reverse_input: inputs = inputs[::-1]
-        states_layers = []
-        for l in range(n_layer):
-            states_prev = inputs if l == 0 else states_layers[l - 1]
-            states = []
-            h_init = tf.zeros((n_sample, n_hidden[l]), tf.float32)
-            for t in range(n_step_input):
-                h_prev = h_init if t == 0 else states[-1]
-                input_t = states_prev[t]
-                h_t = encoder_cells[l](h_prev, input_t)
-                states.append(h_t)
-            states_layers.append(states)
-        return states_layers
-
-    states_layers = build_encoder_layers()
-    states_r_layers = build_encoder_layers(reverse_input=True)
+    states_layers = build_encoder_layers(x, n_step_input, encoder_layers, reverse_input=False)
+    states_r_layers = build_encoder_layers(x, n_step_input, encoder_r_layers, reverse_input=True)
 
     # decoding
     outputs = list()
@@ -195,6 +213,7 @@ if __name__ == '__main__':
     regularizer = 0.
     for k, v in variables.iteritems():
         regularizer += tf.reduce_mean(tf.square(v))
+    regularizer /= len(variables)
 
     # cost
     cost = loss + gamma * regularizer
@@ -303,7 +322,6 @@ if __name__ == '__main__':
     print 'edit dist is {}'.format(edit_distance(target, pred))
     print ''
 
-
     # interactive testing
     inputs = ['womenyouxinxinnengyingdezhechangbisai', 'youyujingyanbuzu', 'tebieshizuijin_nianlai']
     for input in inputs:
@@ -321,3 +339,7 @@ if __name__ == '__main__':
         print "source:     " + input
         print "prediction: " + "".join(pred)
         print ""
+
+
+if __name__ == '__main__':
+    main()
