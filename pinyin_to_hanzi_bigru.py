@@ -120,14 +120,18 @@ def vectorise(string, vocab):
     return coding
 
 
-def vectorise_list_of_pairs(pairs, vocab_source, vocab_target):
+def digitalise(string, vocab):
+    return np.array([vocab[x] for x in string])
+
+
+def prepare_data(pairs, vocab_source, vocab_target):
     """
     The strings in pairs must be aligned, that is, their lengths are padded to the same
     """
     source = []
     target = []
     for s, t in pairs:
-        source.append(vectorise(s, vocab_source))
+        source.append(digitalise(s, vocab_source))
         target.append(vectorise(t, vocab_target))
     source = np.stack(source, axis=0)
     target = np.stack(target, axis=0)
@@ -159,10 +163,11 @@ def main():
     dataset_file = 'dataset/dataset_split.pkl'
     vocab_file = 'dataset/vocab.pkl'
     
-    n_input = 28
+    source_vocab_size = 28
+    embed_dim = 56
     n_output = 1104
     n_step_input = 44
-    n_hidden = [64]
+    n_hidden = [256]
     n_layer = len(n_hidden)
     weight_stddev = 0.1
     n_epoch = 10
@@ -174,14 +179,18 @@ def main():
     verbose = False
     
     # -- build the graph --
-    x = tf.placeholder(tf.float32, [None, n_step_input, n_input], name='x')  # n_sample x n_input_step x n_input
+    x = tf.placeholder(tf.int32, [None, n_step_input], name='x')  # n_sample x n_input_step
     y = tf.placeholder(tf.float32, [None, n_step_input, n_output], name='y')
+
+    # embedding layer
+    embedding = weight_variable_uniform([source_vocab_size, embed_dim], radius=weight_stddev)
+    embed_x = tf.nn.embedding_lookup(embedding, x)
 
     encoder_layers = []
     encoder_r_layers = []
     variables = dict()
     for l in range(n_layer):
-        input_size = n_input if l == 0 else n_hidden[l - 1]
+        input_size = embed_dim if l == 0 else n_hidden[l - 1]
         layer_size = n_hidden[l]
         encoder = GRUCell(input_size, layer_size, weight_stddev, name='encoder:{}'.format(l))
         encoder_r = GRUCell(input_size, layer_size, weight_stddev, name='encoder_r:{}'.format(l))
@@ -190,12 +199,12 @@ def main():
         encoder_r_layers.append(encoder_r)
     W_o = weight_variable_uniform([2 * n_hidden[-1], n_output], weight_stddev)
     b_o = tf.Variable(np.zeros(n_output, dtype=np.float32))
-    variables = join_dicts([variables, {'W_o': W_o, 'b_o': b_o}])
+    variables = join_dicts([variables, {'W_o': W_o, 'b_o': b_o, 'embedding': embedding}])
 
     # encoding
     n_sample = tf.shape(x)[0]
-    states_layers = build_encoder_layers(x, n_step_input, encoder_layers, reverse_input=False)
-    states_r_layers = build_encoder_layers(x, n_step_input, encoder_r_layers, reverse_input=True)
+    states_layers = build_encoder_layers(embed_x, n_step_input, encoder_layers, reverse_input=False)
+    states_r_layers = build_encoder_layers(embed_x, n_step_input, encoder_r_layers, reverse_input=True)
 
     # decoding
     outputs = list()
@@ -240,7 +249,7 @@ def main():
         sample_counter = 0
         for i in range(int(n_epoch * n_sample / batch_size)):
             if i % int(validation_steps) == 0:
-                source, target = vectorise_list_of_pairs(validation_set, vocab_source, vocab_target)
+                source, target = prepare_data(validation_set, vocab_source, vocab_target)
                 c, l, r = sess.run([cost, loss, regularizer],
                                    feed_dict={x: source,
                                               y: target})
@@ -255,7 +264,7 @@ def main():
 
             selected_idx = np.random.permutation(n_sample)[0 : batch_size]
             batch_pairs = [train_set[k] for k in selected_idx]
-            source, target = vectorise_list_of_pairs(batch_pairs, vocab_source, vocab_target)
+            source, target = prepare_data(batch_pairs, vocab_source, vocab_target)
             _, c, l, r = sess.run([train_step, cost, loss, regularizer], feed_dict={x: source, y: target})
             if verbose:
                 print '{i}-th batch, cost {c:.5f}, loss {l:.5f}, paramter regularizer {r:.5f}'.format(i=i, c=c, l=l, r=r)
@@ -267,14 +276,14 @@ def main():
         cPickle.dump(parameters, open('models/parameters_final.pkl', 'wb'))
 
         # evaluate on test set
-        source, target = vectorise_list_of_pairs(test_set, vocab_source, vocab_target)
+        source, target = prepare_data(test_set, vocab_source, vocab_target)
         l = sess.run(loss, feed_dict={x: source, y: target})
         print 'test set: {n} samples, loss {l:.8f}'.format(n=len(test_set), l=l)
     sess.close()
 
     parameters = cPickle.load(open('models/parameters_final.pkl', 'rb'))
     # evaluate on test set
-    source, target = vectorise_list_of_pairs(test_set, vocab_source, vocab_target)
+    source, target = prepare_data(test_set, vocab_source, vocab_target)
     sess = tf.Session()
     feed_dict = dict()
     for k, v in variables.iteritems():
@@ -296,7 +305,7 @@ def main():
     print ''
 
     pair = test_set[1000]
-    source, target = vectorise_list_of_pairs([pair], vocab_source, vocab_target)
+    source, target = prepare_data([pair], vocab_source, vocab_target)
     feed_dict = dict()
     for k, v in variables.iteritems():
         feed_dict[v] = parameters[k]
