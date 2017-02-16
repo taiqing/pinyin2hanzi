@@ -156,20 +156,18 @@ def edit_distance(input_x, input_y):
 def main():
     np.random.seed(1001)
 
-    dataset_file = 'dataset/dataset.pkl'
+    dataset_file = 'dataset/dataset_split.pkl'
     vocab_file = 'dataset/vocab.pkl'
     
     n_input = 28
     n_output = 1104
     n_step_input = 44
-    n_hidden = [256]
+    n_hidden = [64]
     n_layer = len(n_hidden)
     weight_stddev = 0.1
     n_epoch = 10
     batch_size = 100
     validation_steps = 100
-    validation_portion = 0.025
-    test_portion = 0.025
     save_param_steps = 100
     learning_rate = 1e-2
     gamma = 1.
@@ -232,16 +230,7 @@ def main():
     for k, v in vocab_target.iteritems():
         vocab_target_r[v] = k
 
-    dataset = cPickle.load(open(dataset_file, 'rb'))
-
-    n_sample = len(dataset)
-    permutation = np.random.permutation(n_sample)
-    selected_idx = permutation[0: int(n_sample * validation_portion)]
-    validation_set = [dataset[k] for k in selected_idx]
-    selected_idx = permutation[int(n_sample * validation_portion) : int(n_sample * validation_portion) + int(n_sample * test_portion)]
-    test_set = [dataset[k] for k in selected_idx]
-    selected_idx = permutation[int(n_sample * validation_portion) + int(n_sample * test_portion) : ]
-    train_set = [dataset[k] for k in selected_idx]
+    train_set, validation_set, test_set = cPickle.load(open(dataset_file, 'rb'))
     print '{tr} training samples, {v} validation samples, {te} test samples'.format(tr=len(train_set), v=len(validation_set), te=len(test_set))
 
     n_sample = len(train_set)
