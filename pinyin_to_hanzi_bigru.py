@@ -1,5 +1,7 @@
 # coding=utf-8
 
+# RNN with two-way GRU cells
+
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import array_ops
