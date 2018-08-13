@@ -75,13 +75,13 @@ class GRUCell(object):
         :param x: must be rank-2
         :return:
         """
-        hx = array_ops.concat(1, [h, x])
+        hx = array_ops.concat(axis=1, values=[h, x])
         # z: update gate
         z = tf.sigmoid(tf.matmul(hx, self.W_z) + self.b_z)
         # r: reset gate
         r = tf.sigmoid(tf.matmul(hx, self.W_r) + self.b_r)
         # h_c: candidate hidden state
-        h_candidate = tf.tanh(tf.matmul(array_ops.concat(1, [r * h, x]), self.W_c) + self.b_c)
+        h_candidate = tf.tanh(tf.matmul(array_ops.concat(axis=1, values=[r * h, x]), self.W_c) + self.b_c)
         new_h = (1 - z) * h + z * h_candidate
         return new_h
 
@@ -209,10 +209,10 @@ def main():
     # decoding
     outputs = list()
     for t in range(n_step_input):
-        h_t = tf.concat(1, [states_layers[-1][t], states_r_layers[-1][-t-1]])
+        h_t = tf.concat(axis=1, values=[states_layers[-1][t], states_r_layers[-1][-t-1]])
         out_t = tf.nn.softmax(tf.matmul(h_t, W_o) + b_o)
         outputs.append(out_t)
-    outputs = tf.pack(outputs, axis=1)  # outputs: n_samples x n_step x n_output
+    outputs = tf.stack(outputs, axis=1)  # outputs: n_samples x n_step x n_output
     predictions = tf.argmax(outputs, axis=2, name='predictions') # predictions: n_samples x n_step
 
     # loss
