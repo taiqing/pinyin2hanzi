@@ -4,7 +4,7 @@
 
 Bi-GRU.
 
-The input is a sequence of phonetic letters, and the output is a sequence of Chinese characters. 
+The input is a sequence of romanized phonetic letters, and the output is a sequence of Chinese characters. 
 For example, the input is ```womenyouxinxinyingdezhecibisai```, and the output should be ```我们有信心赢得这次比赛```("we have confidence to win the game").
 
 ![](architecture.png)
