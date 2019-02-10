@@ -45,3 +45,7 @@ output: 由于经验不足
 input: tebieshizuijin_nianlai
 
 output: 特别是最近_年来
+
+### Dataset
+
+You can download the dataset from this link: https://www.dropbox.com/s/fzahr4euzu8crvz/dataset.zip?dl=0
