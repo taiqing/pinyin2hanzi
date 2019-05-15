@@ -26,7 +26,7 @@ pinyin_to_hanzi_bigru.py
 
 Error rate is measured by the number of edits divided by the number of Chinese characters, averaged for all the testing sentences.
 
-The models were trained on 67,000 ```(phonetic letters, Chinese sentences)``` pairs.
+The models were trained on 67,000 ```(phonetic letters, Chinese character sentence)``` pairs.
 
 |                | #test sentences | #hidden nodes | error rate |
 |----------------|-----------------|---------------|------------|
@@ -40,7 +40,9 @@ output: 我们有信心赢得这次比赛
 
 input: youyujingyanbuzu
 
+
 output: 由于经验不足
+
 
 input: tebieshizuijin_nianlai
 
