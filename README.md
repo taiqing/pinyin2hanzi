@@ -5,7 +5,7 @@
 The input is a sequence of romanized phonetic letters, and the output is a sequence of Chinese characters. 
 For example, the input is ```womenyouxinxinyingdezhecibisai```, and the output should be ```我们有信心赢得这次比赛```("we have confidence to win the game").
 
-![](architecture.png)
+![Bi-directional Gated RNN for End-to-End Translation of Chinese Phonetic Letters to Characters](architecture.png)
 
 ### Pipeline
 setup_corpus.py
