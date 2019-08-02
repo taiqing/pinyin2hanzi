@@ -1,4 +1,4 @@
-## Gated RNN for End-to-End Translation of Chinese Phonetic Letters to Characters
+## Bi-directional Gated RNN for End-to-End Translation of Chinese Phonetic Letters to Characters
 
 ### Architecture 
 
